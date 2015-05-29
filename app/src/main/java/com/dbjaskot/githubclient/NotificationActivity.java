@@ -1,12 +1,10 @@
 package com.dbjaskot.githubclient;
 
-import android.annotation.TargetApi;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.TaskStackBuilder;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Build;
 import android.os.Bundle;
 import android.support.v4.app.NotificationCompat;
 import android.support.v7.app.ActionBarActivity;
@@ -42,6 +40,8 @@ public class NotificationActivity extends ActionBarActivity {
 
     private static final GitHubService service = MainActivity.service;
 
+    private Thread thread;
+
     private String token;
     private String notificationId = "";
 
@@ -62,6 +62,92 @@ public class NotificationActivity extends ActionBarActivity {
 
         Intent intent = getIntent();
         token = intent.getStringExtra(MainActivity.AUTH_TOKEN);
+
+        uglyAsHellNotificationService();
+    }
+
+//    public Notification checkForNewNotification() {
+
+    //    }
+//
+//        newNotification = null;
+
+    public void uglyAsHellNotificationService() {
+        thread = new Thread(new Runnable() {
+
+            public void run() {
+                while (true) {
+
+                    service.getNotifications(
+                            token,
+                            new Callback<List<Notification>>() {
+                                @Override
+                                public void success(List<Notification> notifications, Response response) {
+
+                                    if (!notifications.isEmpty()) {
+                                        Notification notification = notifications.get(0);
+
+                                        repoName = String.valueOf(notification.getRepository().getFullName());
+                                        notifyType = String.valueOf(notification.getSubject().getType());
+                                        notifyTitle = String.valueOf(notification.getSubject().getTitle());
+                                        String commentUrl = String.valueOf(notification.getSubject().getLatestCommentUrl());
+                                        notificationId = notification.getId();
+
+                                        String[] commentPathList = commentUrl.split("/");
+
+                                        if (commentPathList.length == 8) {
+                                            service.getRequest(
+                                                    commentPathList[4],
+                                                    commentPathList[5],
+                                                    commentPathList[7],
+                                                    new Callback<Comment>() {
+                                                        @Override
+                                                        public void success(Comment comment, Response response) {
+                                                            notifyUser = comment.getUser().getLogin();
+                                                        }
+
+                                                        @Override
+                                                        public void failure(RetrofitError error) {
+                                                        }
+                                                    });
+                                        } else {
+                                            service.getComment(
+                                                    commentPathList[4],
+                                                    commentPathList[5],
+                                                    commentPathList[8],
+                                                    new Callback<Comment>() {
+                                                        @Override
+                                                        public void success(Comment comment, Response response) {
+                                                            notifyUser = comment.getUser().getLogin();
+                                                        }
+
+                                                        @Override
+                                                        public void failure(RetrofitError error) {
+                                                        }
+                                                    });
+                                        }
+                                        makeNotification();
+                                    }
+                                }
+
+                                @Override
+                                public void failure(RetrofitError error) {
+                                }
+                            });
+
+
+                    try {
+                        Thread.sleep(10000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                        break;
+                    }
+
+                }
+            }
+        });
+        thread.start();
+
     }
 
     public void notificationClick(View v) {
@@ -173,7 +259,7 @@ public class NotificationActivity extends ActionBarActivity {
         setNotificationAsRead();
     }
 
-    public void makeNotification(View v) {
+    public void makeNotification() {
         NotificationCompat.Builder mBuilder =
                 new NotificationCompat.Builder(this)
                         .setSmallIcon(R.drawable.githubmark)
